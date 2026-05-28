@@ -314,8 +314,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="atab-purchase" class="atab">
       <div class="section-title">Einkauf einbuchen</div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">Wie viele Einheiten hast du eingekauft? Nur ausgefüllte Felder werden gebucht.</p>
+      <div class="card" style="margin-bottom:12px">
+        <div class="form-group" style="margin:0">
+          <label>Einkaufsdatum</label>
+          <input type="date" id="pur-date">
+        </div>
+      </div>
       <div class="card" id="pur-form"><div class="loading">Lädt...</div></div>
       <button class="btn btn-primary btn-full" onclick="savePurchase()">Einkauf einbuchen</button>
+      <div id="pur-history" style="margin-top:20px"></div>
     </div>
 
     <div id="atab-billing" class="atab">
@@ -547,7 +554,7 @@ function loadAdminTab(name) {
   if (name === 'products') loadAdminProducts();
   if (name === 'persons') loadAdminPersons();
   if (name === 'inventory') loadInventoryForm();
-  if (name === 'purchase') loadPurchaseForm();
+  if (name === 'purchase') { loadPurchaseForm(); loadPurchaseHistory(); }
   if (name === 'billing') initBilling();
 }
 
@@ -697,6 +704,8 @@ async function saveInventory() {
 }
 
 async function loadPurchaseForm() {
+  const dateInput = document.getElementById('pur-date');
+  dateInput.value = new Date().toISOString().slice(0, 10);
   const products = await api('GET', '/api/products');
   const form = document.getElementById('pur-form');
   const active = products.filter(p => p.active);
@@ -711,14 +720,43 @@ async function loadPurchaseForm() {
   `).join('');
 }
 
+async function loadPurchaseHistory() {
+  const div = document.getElementById('pur-history');
+  if (!div) return;
+  const purchases = await api('GET', '/api/purchases');
+  if (purchases.length === 0) {
+    div.innerHTML = '<div class="section-title">Einkaufshistorie</div><div class="empty">Noch keine Einkäufe erfasst</div>';
+    return;
+  }
+  const grouped = {};
+  purchases.forEach(p => {
+    const key = p.purchase_date || p.created_at.slice(0, 10);
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(p);
+  });
+  let html = '<div class="section-title">Einkaufshistorie</div>';
+  Object.keys(grouped).sort((a, b) => b.localeCompare(a)).forEach(dateKey => {
+    const label = new Date(dateKey + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+    html += `<div class="card" style="margin-bottom:10px"><div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${label}</div>`;
+    grouped[dateKey].forEach(p => {
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:14px"><span>${p.product_name}</span><span class="tag tag-green">+${p.qty}</span></div>`;
+    });
+    html += '</div>';
+  });
+  div.innerHTML = html;
+}
+
 async function savePurchase() {
+  const date = document.getElementById('pur-date').value;
+  if (!date) { toast('Bitte Datum auswählen'); return; }
   const inputs = document.querySelectorAll('#pur-form input[data-id]');
   const items = [];
   inputs.forEach(input => { if (input.value && parseInt(input.value) > 0) items.push({ productId: input.dataset.id, qty: parseInt(input.value) }); });
   if (items.length === 0) { toast('Keine Mengen eingegeben'); return; }
-  await api('POST', '/api/purchases', { items });
+  await api('POST', '/api/purchases', { items, date });
   toast('Einkauf eingebucht! Bestände aktualisiert.');
   loadPurchaseForm();
+  loadPurchaseHistory();
 }
 
 async function initBilling() {

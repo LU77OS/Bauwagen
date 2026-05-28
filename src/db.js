@@ -75,6 +75,10 @@ db.exec(`
   );
 `);
 
+try {
+  db.exec('ALTER TABLE purchases ADD COLUMN purchase_date TEXT');
+} catch(e) {}
+
 const existingPassword = db.prepare("SELECT value FROM settings WHERE key = 'password'").get();
 if (!existingPassword) {
   db.prepare("INSERT INTO settings (key, value) VALUES ('password', '1234')").run();

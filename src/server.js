@@ -174,15 +174,23 @@ app.delete('/api/bookings/:id', (req, res) => {
 
 // ---- PURCHASES ----
 
+app.get('/api/purchases', (req, res) => {
+  const purchases = db.prepare(
+    'SELECT * FROM purchases ORDER BY COALESCE(purchase_date, date(created_at)) DESC, created_at DESC LIMIT 100'
+  ).all();
+  res.json(purchases);
+});
+
 app.post('/api/purchases', (req, res) => {
-  const { items } = req.body;
+  const { items, date } = req.body;
   if (!items || items.length === 0) return res.status(400).json({ error: 'Keine Artikel' });
+  const purchaseDate = date || new Date().toISOString().slice(0, 10);
   const savePurchase = db.transaction(() => {
     items.forEach(item => {
       const product = db.prepare('SELECT * FROM products WHERE id = ?').get(item.productId);
       if (!product) return;
       db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(item.qty, item.productId);
-      db.prepare('INSERT INTO purchases (id, product_id, product_name, qty) VALUES (?, ?, ?, ?)').run(uid(), item.productId, product.name, item.qty);
+      db.prepare('INSERT INTO purchases (id, product_id, product_name, qty, purchase_date) VALUES (?, ?, ?, ?, ?)').run(uid(), item.productId, product.name, item.qty, purchaseDate);
     });
   });
   savePurchase();
